@@ -1,0 +1,18 @@
+{
+  "name": "@genee/modbus",
+  "version": "1.0.0",
+  "main": "lib/index",
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-typescript": "^4.1.2",
+    "@types/node": "12",
+    "jasmine": "^3.5.0",
+    "rollup": "^2.16.1",
+    "rollup-plugin-terser": "^6.1.0",
+    "tslib": "^2.0.0",
+    "typescript": "^3.9.5"
+  },
+  "scripts": {
+    "build": "rollup -c"
+  }
+}
