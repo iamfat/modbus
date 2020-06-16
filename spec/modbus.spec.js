@@ -1,22 +1,49 @@
 describe('ModBus', () => {
     const ModBus = require('../lib/index');
 
-    it('should readCoilStatus()', () => {});
+    it('should readCoilStatus()', async () => {
+        const modbus = new ModBus({
+            write(buffer) {
+                // => 0x01 0x01 0x00 0x00 0x00 0x10 0x3D 0xC6
+                // <= 0x01 0x01 0x02 0x03 0x00 0xB9 0x0C
+                expect(buffer.toString('hex')).toBe('0101000000103dc6');
+                modbus.read(Buffer.from([0x01, 0x01, 0x02, 0x03, 0x00, 0xb9, 0x0c]));
+            },
+        });
+
+        const r = await modbus.unit(1).readCoilStatus(0, 16);
+        expect(r.states[0]).toBe(true);
+        expect(r.states[1]).toBe(true);
+        expect(r.states[5]).toBe(false);
+        expect(r.states[6]).toBe(false);
+    });
 
     it('should readInputRegisters()', () => {});
 
     it('should readHoldingRegisters()', async () => {});
 
-    it('should writeCoil()', () => {});
+    it('should writeCoil()', async () => {
+        const modbus = new ModBus({
+            write(buffer) {
+                // => 0x01 0x05 0x00 0x01 0xFF 0x00 0xDD 0xFA
+                // <= 0x01 0x05 0x00 0x01 0xFF 0x00 0xDD 0xFA
+                expect(buffer.toString('hex')).toBe('01050001ff00ddfa');
+                modbus.read(Buffer.from([0x01, 0x05, 0x00, 0x01, 0xff, 0x00, 0xdd, 0xfa]));
+            },
+        });
+
+        const r = await modbus.unit(1).writeCoil(1, true);
+        expect(r).toEqual({ address: 1, state: true });
+    });
 
     it('should writeRegister()', async () => {
         const modbus = new ModBus({
             write(buffer) {
-                if (buffer.toString('hex') === '6006000000208063') {
-                    modbus.read(Buffer.from([0x60, 0x06, 0x00, 0x00, 0x00, 0x20, 0x80, 0x63]));
-                }
+                expect(buffer.toString('hex')).toBe('6006000000208063');
+                modbus.read(Buffer.from([0x60, 0x06, 0x00, 0x00, 0x00, 0x20, 0x80, 0x63]));
             },
         });
+
         let unit = modbus.unit(96);
         let r = await unit.writeRegister(0, 32);
         expect(r.address).toBe(0);
