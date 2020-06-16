@@ -22,7 +22,7 @@ type Options = {
 
 type Frame = { crc: number; address: number; code: number; length: number; data: Buffer };
 
-type Response = { address?: number; state?: boolean; value?: number; data?: Buffer };
+type Response = { address?: number; state?: boolean; value?: number; states?: boolean[] };
 
 type Unit = {
     readCoilStatus(dataAddress: number, length: number): Promise<Response>;
@@ -413,17 +413,17 @@ class ModBus {
      */
     private parseCoils(frame) {
         const length = frame.data.readUInt8(2);
-        const contents = [];
+        const states: boolean[] = [];
 
         for (let i = 0; i < length; i++) {
             let reg = frame.data[i + 3];
             for (let j = 0; j < 8; j++) {
-                contents.push((reg & 1) === 1);
+                states.push((reg & 1) === 1);
                 reg = reg >> 1;
             }
         }
 
-        return { data: contents };
+        return { states };
     }
 
     /**
