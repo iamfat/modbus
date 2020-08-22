@@ -1,9 +1,5 @@
 type Logger = {
-    info(...args: any[]): void;
     debug(...args: any[]): void;
-    warn(...args: any[]): void;
-    error(...args: any[]): void;
-    fatal(...args: any[]): void;
 };
 
 const NullLogger = new Proxy({} as Logger, {
@@ -25,11 +21,11 @@ type Unit = {
     readCoilStatus(dataAddress: number, length: number): Promise<Response>;
     readInputStatus(dataAddress: number, length: number, code: number): Promise<Response>;
     readHoldingRegisters(dataAddress: number, length: number): Promise<Response>;
-    readInputRegisters(dataAddress, length, code): Promise<Response>;
-    writeCoil(dataAddress, state): Promise<Response>;
-    writeRegister(dataAddress, value): Promise<Response>;
-    writeCoils(dataAddress, array): Promise<Response>;
-    writeRegisters(dataAddress, array): Promise<Response>;
+    readInputRegisters(dataAddress: number, length: number, code: number): Promise<Response>;
+    writeCoil(dataAddress: number, state: boolean): Promise<Response>;
+    writeRegister(dataAddress: number, value: number): Promise<Response>;
+    writeCoils(dataAddress: number, states: boolean[]): Promise<Response>;
+    writeRegisters(dataAddress: number, values: number[]): Promise<Response>;
 };
 
 const MODBUS_RESPONSE_TIMEOUT = 250;
@@ -134,7 +130,7 @@ class ModBus {
                 /**
                  * Write a Modbus "Read Input Registers" (FC=04) to serial port.
                  */
-                readInputRegisters(dataAddress, length, code) {
+                readInputRegisters(dataAddress: number, length: number, code: number) {
                     // function code defaults to 4
                     code = code || 4;
                     const codeLength = 6;
@@ -158,7 +154,7 @@ class ModBus {
                 /**
                  * Write a Modbus "Force Single Coil" (FC=05) to serial port.
                  */
-                writeCoil(dataAddress, state) {
+                writeCoil(dataAddress: number, state: boolean) {
                     const code = 5;
                     const codeLength = 6;
                     const buf = Buffer.alloc(codeLength + 2); // add 2 crc bytes
@@ -182,7 +178,7 @@ class ModBus {
                 /**
                  * Write a Modbus "Preset Single Register " (FC=6) to serial port.
                  */
-                writeRegister(dataAddress, value) {
+                writeRegister(dataAddress: number, value: number) {
                     const code = 6;
                     const codeLength = 6; // 1B deviceAddress + 1B functionCode + 2B dataAddress + 2B value
                     const buf = Buffer.alloc(codeLength + 2); // add 2 crc bytes
@@ -206,18 +202,18 @@ class ModBus {
                 /**
                  * Write a Modbus "Force Multiple Coils" (FC=15) to serial port.
                  */
-                writeCoils(dataAddress, array) {
+                writeCoils(dataAddress: number, states: boolean[]) {
                     const code = 15;
                     const i = 0;
 
-                    const dataBytes = Math.ceil(array.length / 8);
+                    const dataBytes = Math.ceil(states.length / 8);
                     const codeLength = 7 + dataBytes;
                     const buf = Buffer.alloc(codeLength + 2); // add 2 crc bytes
 
                     buf.writeUInt8(address, 0);
                     buf.writeUInt8(code, 1);
                     buf.writeUInt16BE(dataAddress, 2);
-                    buf.writeUInt16BE(array.length, 4);
+                    buf.writeUInt16BE(states.length, 4);
                     buf.writeUInt8(dataBytes, 6);
 
                     // clear the data bytes before writing bits data
@@ -225,10 +221,10 @@ class ModBus {
                         buf.writeUInt8(0, 7 + i);
                     }
 
-                    for (let i = 0; i < array.length; i++) {
+                    for (let i = 0; i < states.length; i++) {
                         // buffer bits are already all zero (0)
                         // only set the ones set to one (1)
-                        if (array[i]) {
+                        if (states[i]) {
                             buf.writeBit(true, i, 7);
                         }
                     }
@@ -242,19 +238,19 @@ class ModBus {
                 /**
                  * Write a Modbus "Preset Multiple Registers" (FC=16) to serial port.
                  */
-                writeRegisters(dataAddress, array) {
+                writeRegisters(dataAddress: number, values: number[]) {
                     let code = 16;
-                    let codeLength = 7 + 2 * array.length;
+                    let codeLength = 7 + 2 * values.length;
                     let buf = Buffer.alloc(codeLength + 2); // add 2 crc bytes
 
                     buf.writeUInt8(address, 0);
                     buf.writeUInt8(code, 1);
                     buf.writeUInt16BE(dataAddress, 2);
-                    buf.writeUInt16BE(array.length, 4);
-                    buf.writeUInt8(array.length * 2, 6);
+                    buf.writeUInt16BE(values.length, 4);
+                    buf.writeUInt8(values.length * 2, 6);
 
-                    for (let i = 0; i < array.length; i++) {
-                        buf.writeUInt16BE(array[i], 7 + 2 * i);
+                    for (let i = 0; i < values.length; i++) {
+                        buf.writeUInt16BE(values[i], 7 + 2 * i);
                     }
 
                     // add crc bytes to buffer
@@ -277,7 +273,7 @@ class ModBus {
     }
 
     private readingBuffer = Buffer.alloc(0);
-    public read(chunk) {
+    public read(chunk: Buffer) {
         /* check minimal length */
         let buffer = Buffer.concat([this.readingBuffer, chunk]);
         for (;;) {
