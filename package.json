@@ -1,18 +1,22 @@
 {
   "name": "@genee/modbus",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "main": "lib/index",
+  "browser": "lib/index.browser",
+  "react-native": "lib/index.browser",
   "license": "MIT",
   "devDependencies": {
     "@rollup/plugin-typescript": "^4.1.2",
     "@types/node": "12",
     "jasmine": "^3.5.0",
+    "jasmine-browser-runner": "^0.3.0",
     "rollup": "^2.16.1",
     "rollup-plugin-terser": "^6.1.0",
     "tslib": "^2.0.0",
     "typescript": "^3.9.5"
   },
   "scripts": {
-    "build": "rollup -c"
+    "build": "rollup -c",
+    "test:browser": "jasmine-browser-runner serve"
   }
 }

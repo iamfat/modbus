@@ -13,10 +13,9 @@ export default [
             dir: 'lib',
             format: 'cjs',
             // exports: 'named',
-            sourcemap: true,
         },
         external,
-        plugins: [typescript({ outDir: 'lib', declaration: true }), terser()],
+        plugins: [typescript({ outDir: 'lib', declaration: true })],
     },
     {
         input: 'src/index.ts',
@@ -24,9 +23,29 @@ export default [
             file: 'lib/index.mjs',
             format: 'esm',
             // exports: 'named',
+        },
+        external,
+        plugins: [typescript()],
+    },
+    {
+        input: 'src/index.browser.ts',
+        output: {
+            dir: 'lib',
+            format: 'umd',
+            name: 'ModBus',
             sourcemap: true,
         },
         external,
-        plugins: [typescript(), terser()],
+        plugins: [typescript({ outDir: 'lib', declaration: true }), terser()],
+    },
+    {
+        input: 'src/index.browser.ts',
+        output: {
+            file: 'lib/index.browser.mjs',
+            format: 'esm',
+            // exports: 'named',
+        },
+        external,
+        plugins: [typescript()],
     },
 ];
