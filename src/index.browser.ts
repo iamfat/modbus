@@ -10,6 +10,7 @@ const NullLogger = new Proxy({} as Logger, {
 
 type Options = {
     logger?: Logger;
+    responseTimeout?: number;
     write?: (data: ArrayBuffer) => void;
 };
 
@@ -77,9 +78,11 @@ DataView.prototype.setBit = function (offset: number, bit: number, value: boolea
 class ModBus {
     private units: { [address: number]: Unit } = {};
     private logger: Logger;
+    private responseTimeout: number;
 
     constructor(options: Options) {
         this.logger = options.logger || NullLogger;
+        this.responseTimeout = options.responseTimeout || MODBUS_RESPONSE_TIMEOUT;
         if (options.write) {
             this.write = options.write;
         }
@@ -366,7 +369,7 @@ class ModBus {
             this.logger.debug(message, { address, code, length });
             reject(message);
             this.currentExpectation = undefined;
-        }, MODBUS_RESPONSE_TIMEOUT);
+        }, this.responseTimeout);
 
         this.logger.debug('modbus.writeBuffer', buffer);
         this.write(buffer);
