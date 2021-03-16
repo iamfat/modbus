@@ -10,7 +10,7 @@ const NullLogger = new Proxy({} as Logger, {
 
 type Options = {
     logger?: Logger;
-    responseTimeout?: number;
+    baudRate?: number;
     write?: (data: Buffer) => void;
 };
 
@@ -28,8 +28,6 @@ type Unit = {
     writeCoils(dataAddress: number, states: boolean[]): Promise<Response>;
     writeRegisters(dataAddress: number, values: number[]): Promise<Response>;
 };
-
-const MODBUS_RESPONSE_TIMEOUT = 250;
 
 const crc16 = function (buffer: Buffer) {
     let crc = 0xffff;
@@ -77,11 +75,11 @@ Buffer.prototype.writeBit = function (value: boolean, bit: number, offset = 0) {
 class ModBus {
     private units: { [address: number]: Unit } = {};
     private logger: Logger;
-    private responseTimeout: number;
+    private baudRate: number;
 
     constructor(options: Options) {
         this.logger = options.logger || NullLogger;
-        this.responseTimeout = options.responseTimeout || MODBUS_RESPONSE_TIMEOUT;
+        this.baudRate = options.baudRate || 9600;
         if (options.write) {
             this.write = options.write;
         }
@@ -355,7 +353,7 @@ class ModBus {
             this.logger.debug(message, { address, code, length });
             reject(message);
             this.currentExpectation = undefined;
-        }, this.responseTimeout);
+        }, (length * 35000) / this.baudRate);
 
         this.logger.debug('modbus.writeBuffer', buffer.toString('hex'));
         this.write(buffer);
