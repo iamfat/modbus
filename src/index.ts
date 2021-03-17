@@ -352,6 +352,7 @@ class ModBus {
             const message = `ModBus: Expectation Timeout on Unit:${address}`;
             this.logger.debug(message, { address, code, length });
             reject(message);
+            this.readingBuffer = Buffer.alloc(0);
             this.currentExpectation = undefined;
         }, (length * 35000) / this.baudRate);
 

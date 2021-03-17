@@ -1,6 +1,6 @@
 {
   "name": "@genee/modbus",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "main": "lib/index",
   "browser": "lib/index.browser",
   "react-native": "lib/index.browser",
