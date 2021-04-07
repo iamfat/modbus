@@ -10,7 +10,7 @@ const NullLogger = new Proxy({} as Logger, {
 
 type Options = {
     logger?: Logger;
-    baudRate?: number;
+    timeout?: number | (() => number);
     write?: (data: Buffer) => void;
 };
 
@@ -27,6 +27,15 @@ type Unit = {
     writeRegister(dataAddress: number, value: number): Promise<Response>;
     writeCoils(dataAddress: number, states: boolean[]): Promise<Response>;
     writeRegisters(dataAddress: number, values: number[]): Promise<Response>;
+};
+
+type Expectation = {
+    address: number;
+    code: number;
+    length: number;
+    resolve?: Function;
+    reject?: Function;
+    timeout?: NodeJS.Timeout | number;
 };
 
 const crc16 = function (buffer: Buffer) {
@@ -75,11 +84,17 @@ Buffer.prototype.writeBit = function (value: boolean, bit: number, offset = 0) {
 class ModBus {
     private units: { [address: number]: Unit } = {};
     private logger: Logger;
-    private baudRate: number;
+    private timeout: (expection: Expectation) => number;
 
     constructor(options: Options) {
         this.logger = options.logger || NullLogger;
-        this.baudRate = options.baudRate || 9600;
+        if (typeof options.timeout === 'function') {
+            this.timeout = options.timeout;
+        } else if (typeof options.timeout === 'number') {
+            this.timeout = () => Number(options.timeout);
+        } else {
+            this.timeout = (expectation) => Math.max(250, (expectation.length * 150000) / 9600);
+        }
         if (options.write) {
             this.write = options.write;
         }
@@ -354,7 +369,7 @@ class ModBus {
             reject(message);
             this.readingBuffer = Buffer.alloc(0);
             this.currentExpectation = undefined;
-        }, (length * 35000) / this.baudRate);
+        }, this.timeout(expectation));
 
         this.logger.debug('modbus.writeBuffer', buffer.toString('hex'));
         this.write(buffer);
@@ -414,14 +429,7 @@ class ModBus {
 
     private writingQueue: {
         buffer: Buffer;
-        expectation: {
-            address: number;
-            code: number;
-            length: number;
-            resolve?: Function;
-            reject?: Function;
-            timeout?: NodeJS.Timeout | number;
-        };
+        expectation: Expectation;
     }[] = [];
     private writeBufferWithExpectation(buffer: Buffer, expectation: { address: number; code: number; length: number }) {
         if (this.writingQueue.length > 10) {

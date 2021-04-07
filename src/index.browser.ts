@@ -12,7 +12,7 @@ const NullLogger = new Proxy({} as Logger, {
 
 type Options = {
     logger?: Logger;
-    baudRate?: number;
+    timeout?: number | (() => number);
     write?: (data: ArrayBuffer) => void;
 };
 
@@ -29,6 +29,15 @@ type Unit = {
     writeRegister(dataAddress: number, value: number): Promise<Response>;
     writeCoils(dataAddress: number, states: boolean[]): Promise<Response>;
     writeRegisters(dataAddress: number, values: number[]): Promise<Response>;
+};
+
+type Expectation = {
+    address: number;
+    code: number;
+    length: number;
+    resolve?: Function;
+    reject?: Function;
+    timeout?: NodeJS.Timeout | number;
 };
 
 const crc16 = function (buffer: ArrayBuffer) {
@@ -78,11 +87,17 @@ DataView.prototype.setBit = function (offset: number, bit: number, value: boolea
 class ModBus {
     private units: { [address: number]: Unit } = {};
     private logger: Logger;
-    private baudRate: number;
+    private timeout: (expection: Expectation) => number;
 
     constructor(options: Options) {
         this.logger = options.logger || NullLogger;
-        this.baudRate = options.baudRate || 9600;
+        if (typeof options.timeout === 'function') {
+            this.timeout = options.timeout;
+        } else if (typeof options.timeout === 'number') {
+            this.timeout = () => Number(options.timeout);
+        } else {
+            this.timeout = (expectation) => Math.max(250, (expectation.length * 150000) / 9600);
+        }
         if (options.write) {
             this.write = options.write;
         }
@@ -370,7 +385,7 @@ class ModBus {
             reject(message);
             this.readingBuffer = new ArrayBuffer(0);
             this.currentExpectation = undefined;
-        }, (length * 35000) / this.baudRate);
+        }, this.timeout(expectation));
 
         this.logger.debug('modbus.writeBuffer', toHex(buffer));
         this.write(buffer);
