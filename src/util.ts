@@ -22,3 +22,18 @@ export const toHex = (value: ArrayLike<number> | number | ArrayBuffer, sep = '')
     }
     return s.trim();
 };
+
+export const customAlphabet = (alphabet) => {
+    return (size) => {
+        let id = '';
+        // A compact alternative for `for (var i = 0; i < step; i++)`.
+        let i = size;
+        while (i--) {
+            // `| 0` is more compact and faster than `Math.floor()`.
+            id += alphabet[(Math.random() * alphabet.length) | 0];
+        }
+        return id;
+    };
+};
+
+export const nanoid = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz');

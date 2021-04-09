@@ -1,3 +1,5 @@
+import { toHex, nanoid } from './util';
+
 type Logger = {
     debug(...args: any[]): void;
 };
@@ -11,10 +13,10 @@ const NullLogger = new Proxy({} as Logger, {
 type Options = {
     logger?: Logger;
     timeout?: number | (() => number);
-    write?: (data: Buffer) => void;
+    write?: (data: ArrayBuffer) => void;
 };
 
-type Frame = { crc: number; address: number; code: number; length: number; data: Buffer };
+type Frame = { crc: number; address: number; code: number; length: number; data: ArrayBuffer };
 
 type Response = { address?: number; state?: boolean; value?: number; states?: boolean[] };
 
@@ -35,16 +37,17 @@ type Expectation = {
     length: number;
     resolve?: Function;
     reject?: Function;
-    timeout?: NodeJS.Timeout | number;
+    timeout?: string;
 };
 
-const crc16 = function (buffer: Buffer) {
+const crc16 = function (buffer: ArrayBuffer) {
     let crc = 0xffff;
     let odd;
 
-    for (let i = 0; i < buffer.length; i++) {
-        crc = crc ^ buffer[i];
-        for (let j = 0; j < 8; j++) {
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.length; i++) {
+        crc = crc ^ bytes[i];
+        for (var j = 0; j < 8; j++) {
             odd = crc & 0x0001;
             crc = crc >> 1;
             if (odd) {
@@ -56,19 +59,31 @@ const crc16 = function (buffer: Buffer) {
     return crc;
 };
 
+const expectationTimeout: { [timeoutId: string]: { expires: number; callback: Function } } = {};
+setInterval(() => {
+    const now = Date.now();
+    Object.keys(expectationTimeout).forEach((timeoutId) => {
+        const { expires, callback } = expectationTimeout[timeoutId];
+        if (now >= expires) {
+            delete expectationTimeout[timeoutId];
+            callback();
+        }
+    });
+}, 500);
+
 declare global {
-    interface Buffer {
-        writeBit(value: boolean, bit: number, offset: number);
+    interface DataView {
+        setBit(offset: number, bit: number, value: boolean): void;
     }
 }
 
-Buffer.prototype.writeBit = function (value: boolean, bit: number, offset = 0) {
+DataView.prototype.setBit = function (offset: number, bit: number, value: boolean) {
     let byteOffset = Math.floor(offset + bit / 8);
     let bitOffset = bit % 8;
     let bitMask = 0x1 << bitOffset;
 
     // get byte from buffer
-    let byte = this.readUInt8(byteOffset);
+    let byte = this.getUint8(byteOffset);
 
     // set bit on / off
     if (value) {
@@ -78,7 +93,7 @@ Buffer.prototype.writeBit = function (value: boolean, bit: number, offset = 0) {
     }
 
     // set byte to buffer
-    this.writeUInt8(byte, byteOffset);
+    this.setUint8(byteOffset, byte);
 };
 
 class ModBus {
@@ -119,15 +134,17 @@ class ModBus {
                     code = code || 2;
 
                     const codeLength = 6;
-                    const buf = Buffer.alloc(codeLength + 2); // add 2 crc bytes
+                    const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
+                    const view = new DataView(buf);
 
-                    buf.writeUInt8(address, 0);
-                    buf.writeUInt8(code, 1);
-                    buf.writeUInt16BE(dataAddress, 2);
-                    buf.writeUInt16BE(length, 4);
+                    view.setUint8(0, address);
+                    view.setUint8(1, code);
+                    view.setUint16(2, dataAddress, false);
+
+                    view.setUint16(4, length, false);
 
                     // add crc bytes to buffer
-                    buf.writeUInt16LE(crc16(buf.slice(0, -2)), codeLength);
+                    view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
 
                     return bus.writeBufferWithExpectation(buf, {
                         address,
@@ -150,15 +167,17 @@ class ModBus {
                     // function code defaults to 4
                     code = code || 4;
                     const codeLength = 6;
-                    const buf = Buffer.alloc(codeLength + 2); // add 2 crc bytes
+                    const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
+                    const view = new DataView(buf);
 
-                    buf.writeUInt8(address, 0);
-                    buf.writeUInt8(code, 1);
-                    buf.writeUInt16BE(dataAddress, 2);
-                    buf.writeUInt16BE(length, 4);
+                    view.setUint8(0, address);
+                    view.setUint8(1, code);
+                    view.setUint16(2, dataAddress, false);
+
+                    view.setUint16(4, length, false);
 
                     // add crc bytes to buffer
-                    buf.writeUInt16LE(crc16(buf.slice(0, -2)), codeLength);
+                    view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
 
                     return bus.writeBufferWithExpectation(buf, {
                         address,
@@ -173,16 +192,17 @@ class ModBus {
                 writeCoil(dataAddress: number, state: boolean) {
                     const code = 5;
                     const codeLength = 6;
-                    const buf = Buffer.alloc(codeLength + 2); // add 2 crc bytes
+                    const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
+                    const view = new DataView(buf);
 
-                    buf.writeUInt8(address, 0);
-                    buf.writeUInt8(code, 1);
-                    buf.writeUInt16BE(dataAddress, 2);
+                    view.setUint8(0, address);
+                    view.setUint8(1, code);
+                    view.setUint16(2, dataAddress, false);
 
-                    buf.writeUInt16BE(state ? 0xff00 : 0x0000, 4);
+                    view.setUint16(4, state ? 0xff00 : 0x0000, false);
 
                     // add crc bytes to buffer
-                    buf.writeUInt16LE(crc16(buf.slice(0, -2)), codeLength);
+                    view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
 
                     return bus.writeBufferWithExpectation(buf, {
                         address,
@@ -197,16 +217,17 @@ class ModBus {
                 writeRegister(dataAddress: number, value: number) {
                     const code = 6;
                     const codeLength = 6; // 1B deviceAddress + 1B functionCode + 2B dataAddress + 2B value
-                    const buf = Buffer.alloc(codeLength + 2); // add 2 crc bytes
+                    const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
+                    const view = new DataView(buf);
 
-                    buf.writeUInt8(address, 0);
-                    buf.writeUInt8(code, 1);
-                    buf.writeUInt16BE(dataAddress, 2);
+                    view.setUint8(0, address);
+                    view.setUint8(1, code);
+                    view.setUint16(2, dataAddress, false);
 
-                    buf.writeUInt16BE(value, 4);
+                    view.setUint16(4, value, false);
 
                     // add crc bytes to buffer
-                    buf.writeUInt16LE(crc16(buf.slice(0, -2)), codeLength);
+                    view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
 
                     return bus.writeBufferWithExpectation(buf, {
                         address,
@@ -224,29 +245,31 @@ class ModBus {
 
                     const dataBytes = Math.ceil(states.length / 8);
                     const codeLength = 7 + dataBytes;
-                    const buf = Buffer.alloc(codeLength + 2); // add 2 crc bytes
+                    const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
+                    const view = new DataView(buf);
 
-                    buf.writeUInt8(address, 0);
-                    buf.writeUInt8(code, 1);
-                    buf.writeUInt16BE(dataAddress, 2);
-                    buf.writeUInt16BE(states.length, 4);
-                    buf.writeUInt8(dataBytes, 6);
+                    view.setUint8(0, address);
+                    view.setUint8(1, code);
+                    view.setUint16(2, dataAddress, false);
+
+                    view.setUint16(4, states.length, false);
+                    view.setUint8(6, dataBytes);
 
                     // clear the data bytes before writing bits data
                     for (let i = 0; i < dataBytes; i++) {
-                        buf.writeUInt8(0, 7 + i);
+                        view.setUint8(7 + i, 0);
                     }
 
                     for (let i = 0; i < states.length; i++) {
                         // buffer bits are already all zero (0)
                         // only set the ones set to one (1)
                         if (states[i]) {
-                            buf.writeBit(true, i, 7);
+                            view.setBit(7, i, true);
                         }
                     }
 
                     // add crc bytes to buffer
-                    buf.writeUInt16LE(crc16(buf.slice(0, -2)), codeLength);
+                    view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
 
                     return bus.writeBufferWithExpectation(buf, { address, code, length: 8 });
                 },
@@ -255,22 +278,24 @@ class ModBus {
                  * Write a Modbus "Preset Multiple Registers" (FC=16) to serial port.
                  */
                 writeRegisters(dataAddress: number, values: number[]) {
-                    let code = 16;
-                    let codeLength = 7 + 2 * values.length;
-                    let buf = Buffer.alloc(codeLength + 2); // add 2 crc bytes
+                    const code = 16;
+                    const codeLength = 7 + 2 * values.length;
+                    const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
+                    const view = new DataView(buf);
 
-                    buf.writeUInt8(address, 0);
-                    buf.writeUInt8(code, 1);
-                    buf.writeUInt16BE(dataAddress, 2);
-                    buf.writeUInt16BE(values.length, 4);
-                    buf.writeUInt8(values.length * 2, 6);
+                    view.setUint8(0, address);
+                    view.setUint8(1, code);
+                    view.setUint16(2, dataAddress, false);
+
+                    view.setUint16(4, values.length, false);
+                    view.setUint8(6, values.length * 2);
 
                     for (let i = 0; i < values.length; i++) {
-                        buf.writeUInt16BE(values[i], 7 + 2 * i);
+                        view.setUint16(7 + 2 * i, values[i], false);
                     }
 
                     // add crc bytes to buffer
-                    buf.writeUInt16LE(crc16(buf.slice(0, -2)), codeLength);
+                    view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
 
                     return bus.writeBufferWithExpectation(buf, {
                         address,
@@ -284,16 +309,19 @@ class ModBus {
         return this.units[address];
     }
 
-    private write(chunk: Buffer) {
-        this.logger.debug('write', chunk.toString('hex'));
+    private write(chunk: ArrayBuffer) {
+        this.logger.debug('write', chunk);
     }
 
-    private readingBuffer = Buffer.alloc(0);
-    public read(chunk: Buffer) {
+    private readingBuffer = new ArrayBuffer(0);
+    public read(chunk: ArrayBuffer) {
         /* check minimal length */
-        let buffer = Buffer.concat([this.readingBuffer, chunk]);
+        const bytes = new Uint8Array(this.readingBuffer.byteLength + chunk.byteLength);
+        bytes.set(new Uint8Array(this.readingBuffer), 0);
+        bytes.set(new Uint8Array(chunk), this.readingBuffer.byteLength);
+        let buffer = bytes.buffer;
         for (;;) {
-            if (buffer.length < 5) {
+            if (buffer.byteLength < 5) {
                 // too short to be a frame, waiting for more data;
                 break;
             }
@@ -310,7 +338,7 @@ class ModBus {
                 this.logger.debug(`CRC error, expecting ${crc}, but got ${frame.crc}`, frame);
                 if (this.currentExpectation) {
                     const { timeout, reject } = this.currentExpectation;
-                    clearTimeout(timeout);
+                    delete expectationTimeout[timeout];
                     reject('CRC error');
                     this.currentExpectation = undefined;
                 }
@@ -341,12 +369,12 @@ class ModBus {
                 }
 
                 const { timeout, resolve } = this.currentExpectation;
-                clearTimeout(timeout);
+                delete expectationTimeout[timeout];
                 resolve(ret);
                 this.currentExpectation = undefined;
             } else if (this.currentExpectation) {
                 const { timeout, reject } = this.currentExpectation;
-                clearTimeout(timeout);
+                delete expectationTimeout[timeout];
                 reject('Unexpected response');
                 this.currentExpectation = undefined;
             }
@@ -362,31 +390,38 @@ class ModBus {
         }
         const { buffer, expectation } = this.writingQueue.shift();
         this.currentExpectation = expectation;
-        expectation.timeout = setTimeout(() => {
-            const { address, code, length, reject } = expectation;
-            const message = `ModBus: Expectation Timeout on Unit:${address}`;
-            this.logger.debug(message, { address, code, length });
-            reject(message);
-            this.readingBuffer = Buffer.alloc(0);
-            this.currentExpectation = undefined;
-        }, this.timeout(expectation));
 
-        this.logger.debug('modbus.writeBuffer', buffer.toString('hex'));
+        const timeoutId = nanoid(8);
+        expectationTimeout[timeoutId] = {
+            expires: Date.now() + this.timeout(expectation),
+            callback: () => {
+                const { address, code, length, reject } = expectation;
+                const message = `ModBus: Expectation Timeout on Unit:${address}`;
+                this.logger.debug(message, { address, code, length });
+                reject(message);
+                this.readingBuffer = new ArrayBuffer(0);
+                this.currentExpectation = undefined;
+            },
+        };
+        expectation.timeout = timeoutId;
+
+        this.logger.debug('modbus.writeBuffer', toHex(buffer));
         this.write(buffer);
     }
 
-    private parseFrame(buffer: Buffer): [Frame, Buffer] {
-        const address = buffer.readUInt8(0);
-        const code = buffer.readUInt8(1);
-        const length = code >= 1 && code <= 4 ? buffer.readUInt8(2) + 5 : 8;
-        if (buffer.length < length) {
+    private parseFrame(buffer: ArrayBuffer): [Frame, ArrayBuffer] {
+        const view = new DataView(buffer);
+        const address = view.getUint8(0);
+        const code = view.getUint8(1);
+        const length = code >= 1 && code <= 4 ? view.getUint8(2) + 5 : 8;
+        if (buffer.byteLength < length) {
             // 数据不足
             return [undefined, buffer];
         }
 
         return [
             {
-                crc: buffer.readUInt16LE(length - 2),
+                crc: view.getUint16(length - 2, true),
                 address,
                 code,
                 length,
@@ -428,10 +463,20 @@ class ModBus {
     }
 
     private writingQueue: {
-        buffer: Buffer;
-        expectation: Expectation;
+        buffer: ArrayBuffer;
+        expectation: {
+            address: number;
+            code: number;
+            length: number;
+            resolve?: Function;
+            reject?: Function;
+            timeout?: string;
+        };
     }[] = [];
-    private writeBufferWithExpectation(buffer: Buffer, expectation: { address: number; code: number; length: number }) {
+    private writeBufferWithExpectation(
+        buffer: ArrayBuffer,
+        expectation: { address: number; code: number; length: number },
+    ) {
         if (this.writingQueue.length > 10) {
             return new Promise((_, reject) => {
                 reject('ModBus: expectation queue is full!');
@@ -454,11 +499,12 @@ class ModBus {
      * @param {Frame} frame the data buffer to parse.
      */
     private parseCoils(frame: Frame) {
-        const length = frame.data.readUInt8(2);
+        const view = new DataView(frame.data);
+        const length = view.getUint8(2);
         const states: boolean[] = [];
 
         for (let i = 0; i < length; i++) {
-            let reg = frame.data[i + 3];
+            let reg = view.getUint8(i + 3);
             for (let j = 0; j < 8; j++) {
                 states.push((reg & 1) === 1);
                 reg = reg >> 1;
@@ -475,10 +521,11 @@ class ModBus {
      * @param {Frame} frame the data buffer to parse.
      */
     private parseInputRegisters(frame: Frame) {
-        const length = frame.data.readUInt8(2);
+        const view = new DataView(frame.data);
+        const length = view.getUint8(2);
         const contents = [];
         for (let i = 0; i < length; i += 2) {
-            let reg = frame.data.readUInt16BE(i + 3);
+            let reg = view.getUint16(i + 3, false);
             contents.push(reg);
         }
         return { data: contents };
@@ -491,8 +538,9 @@ class ModBus {
      * @param {Frame} frame the data buffer to parse.
      */
     private parseSingleCoil(frame: Frame) {
-        const address = frame.data.readUInt16BE(2);
-        const state = frame.data.readUInt16BE(4) === 0xff00;
+        const view = new DataView(frame.data);
+        const address = view.getUint16(2, false);
+        const state = view.getUint16(4, false) === 0xff00;
         return { address, state };
     }
 
@@ -503,8 +551,9 @@ class ModBus {
      * @param {Frame} frame the data buffer to parse.
      */
     private parseSingleRegister(frame: Frame) {
-        const address = frame.data.readUInt16BE(2);
-        const value = frame.data.readUInt16BE(4);
+        const view = new DataView(frame.data);
+        const address = view.getUint16(2, false);
+        const value = view.getUint16(4, false);
         return { address, value };
     }
 
@@ -515,8 +564,9 @@ class ModBus {
      * @param {Frame} frame the data buffer to parse.
      */
     private parseMultipleRegisters(frame: Frame) {
-        const address = frame.data.readUInt16BE(2);
-        const length = frame.data.readUInt16BE(4);
+        const view = new DataView(frame.data);
+        const address = view.getUint16(2, false);
+        const length = view.getUint16(4, false);
         return { address, length };
     }
 }
