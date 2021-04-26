@@ -12,7 +12,7 @@ const NullLogger = new Proxy({} as Logger, {
 
 type Options = {
     logger?: Logger;
-    timeout?: number | (() => number);
+    timeout?: number | ((expection: Expectation) => number);
     write?: (data: ArrayBuffer) => void;
 };
 
