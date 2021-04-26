@@ -14,6 +14,7 @@ type Options = {
     logger?: Logger;
     timeout?: number | ((expection: Expectation) => number);
     write?: (data: ArrayBuffer) => void;
+    queueSize?: number;
 };
 
 type Frame = { crc: number; address: number; code: number; length: number; data: ArrayBuffer };
@@ -100,6 +101,7 @@ class ModBus {
     private units: { [address: number]: Unit } = {};
     private logger: Logger;
     private timeout: (expection: Expectation) => number;
+    private queueSize = 10;
 
     constructor(options: Options) {
         this.logger = options.logger || NullLogger;
@@ -112,6 +114,9 @@ class ModBus {
         }
         if (options.write) {
             this.write = options.write;
+        }
+        if (options.queueSize) {
+            this.queueSize = options.queueSize;
         }
     }
 
@@ -477,7 +482,7 @@ class ModBus {
         buffer: ArrayBuffer,
         expectation: { address: number; code: number; length: number },
     ) {
-        if (this.writingQueue.length > 10) {
+        if (this.writingQueue.length > this.queueSize) {
             return new Promise((_, reject) => {
                 reject('ModBus: expectation queue is full!');
             });
