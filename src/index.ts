@@ -389,8 +389,8 @@ class ModBus {
 
     private currentExpectation;
     writeNext() {
-        if (this.currentExpectation) {
-            // someone is waiting, just return
+        if (this.currentExpectation || this.writingQueue.length === 0) {
+            // someone is waiting or queue is empty, just return
             return;
         }
         const { buffer, expectation } = this.writingQueue.shift();
@@ -406,6 +406,7 @@ class ModBus {
                 reject(message);
                 this.readingBuffer = new ArrayBuffer(0);
                 this.currentExpectation = undefined;
+                this.writeNext();
             },
         };
         expectation.timeout = timeoutId;
