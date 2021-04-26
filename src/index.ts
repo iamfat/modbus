@@ -70,7 +70,7 @@ setInterval(() => {
             callback();
         }
     });
-}, 500);
+}, 250);
 
 declare global {
     interface DataView {
@@ -116,7 +116,7 @@ class ModBus {
             this.write = options.write;
         }
         if (options.queueSize) {
-            this.queueSize = options.queueSize;
+            this.queueSize = Number(options.queueSize);
         }
     }
 
