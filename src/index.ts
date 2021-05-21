@@ -98,7 +98,6 @@ DataView.prototype.setBit = function (offset: number, bit: number, value: boolea
 };
 
 class ModBus {
-    private units: { [address: number]: Unit } = {};
     private logger: Logger;
     private timeout: (expection: Expectation) => number;
     private queueSize = 10;
@@ -122,196 +121,192 @@ class ModBus {
 
     unit(address: number) {
         const bus = this;
-        if (!this.units.hasOwnProperty(address)) {
-            this.units[address] = {
-                /**
-                 * Write a Modbus "Read Coil Status" (FC=01) to serial port.
-                 */
-                readCoilStatus(dataAddress: number, length: number) {
-                    return this.readInputStatus(dataAddress, length, 1);
-                },
+        return {
+            /**
+             * Write a Modbus "Read Coil Status" (FC=01) to serial port.
+             */
+            readCoilStatus(dataAddress: number, length: number) {
+                return this.readInputStatus(dataAddress, length, 1);
+            },
 
-                /**
-                 * Write a Modbus "Read Input Status" (FC=02) to serial port.
-                 */
-                readInputStatus(dataAddress: number, length: number, code: number) {
-                    // function code defaults to 2
-                    code = code || 2;
+            /**
+             * Write a Modbus "Read Input Status" (FC=02) to serial port.
+             */
+            readInputStatus(dataAddress: number, length: number, code: number) {
+                // function code defaults to 2
+                code = code || 2;
 
-                    const codeLength = 6;
-                    const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
-                    const view = new DataView(buf);
+                const codeLength = 6;
+                const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
+                const view = new DataView(buf);
 
-                    view.setUint8(0, address);
-                    view.setUint8(1, code);
-                    view.setUint16(2, dataAddress, false);
+                view.setUint8(0, address);
+                view.setUint8(1, code);
+                view.setUint16(2, dataAddress, false);
 
-                    view.setUint16(4, length, false);
+                view.setUint16(4, length, false);
 
-                    // add crc bytes to buffer
-                    view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
+                // add crc bytes to buffer
+                view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
 
-                    return bus.writeBufferWithExpectation(buf, {
-                        address,
-                        code,
-                        length: 3 + Math.floor((length - 1) / 8 + 1) + 2,
-                    });
-                },
+                return bus.writeBufferWithExpectation(buf, {
+                    address,
+                    code,
+                    length: 3 + Math.floor((length - 1) / 8 + 1) + 2,
+                });
+            },
 
-                /**
-                 * Write a Modbus "Read Holding Registers" (FC=03) to serial port.
-                 */
-                readHoldingRegisters(dataAddress: number, length: number) {
-                    return this.readInputRegisters(dataAddress, length, 3);
-                },
+            /**
+             * Write a Modbus "Read Holding Registers" (FC=03) to serial port.
+             */
+            readHoldingRegisters(dataAddress: number, length: number) {
+                return this.readInputRegisters(dataAddress, length, 3);
+            },
 
-                /**
-                 * Write a Modbus "Read Input Registers" (FC=04) to serial port.
-                 */
-                readInputRegisters(dataAddress: number, length: number, code: number) {
-                    // function code defaults to 4
-                    code = code || 4;
-                    const codeLength = 6;
-                    const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
-                    const view = new DataView(buf);
+            /**
+             * Write a Modbus "Read Input Registers" (FC=04) to serial port.
+             */
+            readInputRegisters(dataAddress: number, length: number, code: number) {
+                // function code defaults to 4
+                code = code || 4;
+                const codeLength = 6;
+                const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
+                const view = new DataView(buf);
 
-                    view.setUint8(0, address);
-                    view.setUint8(1, code);
-                    view.setUint16(2, dataAddress, false);
+                view.setUint8(0, address);
+                view.setUint8(1, code);
+                view.setUint16(2, dataAddress, false);
 
-                    view.setUint16(4, length, false);
+                view.setUint16(4, length, false);
 
-                    // add crc bytes to buffer
-                    view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
+                // add crc bytes to buffer
+                view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
 
-                    return bus.writeBufferWithExpectation(buf, {
-                        address,
-                        code,
-                        length: 3 + 2 * length + 2,
-                    });
-                },
+                return bus.writeBufferWithExpectation(buf, {
+                    address,
+                    code,
+                    length: 3 + 2 * length + 2,
+                });
+            },
 
-                /**
-                 * Write a Modbus "Force Single Coil" (FC=05) to serial port.
-                 */
-                writeCoil(dataAddress: number, state: boolean) {
-                    const code = 5;
-                    const codeLength = 6;
-                    const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
-                    const view = new DataView(buf);
+            /**
+             * Write a Modbus "Force Single Coil" (FC=05) to serial port.
+             */
+            writeCoil(dataAddress: number, state: boolean) {
+                const code = 5;
+                const codeLength = 6;
+                const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
+                const view = new DataView(buf);
 
-                    view.setUint8(0, address);
-                    view.setUint8(1, code);
-                    view.setUint16(2, dataAddress, false);
+                view.setUint8(0, address);
+                view.setUint8(1, code);
+                view.setUint16(2, dataAddress, false);
 
-                    view.setUint16(4, state ? 0xff00 : 0x0000, false);
+                view.setUint16(4, state ? 0xff00 : 0x0000, false);
 
-                    // add crc bytes to buffer
-                    view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
+                // add crc bytes to buffer
+                view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
 
-                    return bus.writeBufferWithExpectation(buf, {
-                        address,
-                        code,
-                        length: 8,
-                    });
-                },
+                return bus.writeBufferWithExpectation(buf, {
+                    address,
+                    code,
+                    length: 8,
+                });
+            },
 
-                /**
-                 * Write a Modbus "Preset Single Register " (FC=6) to serial port.
-                 */
-                writeRegister(dataAddress: number, value: number) {
-                    const code = 6;
-                    const codeLength = 6; // 1B deviceAddress + 1B functionCode + 2B dataAddress + 2B value
-                    const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
-                    const view = new DataView(buf);
+            /**
+             * Write a Modbus "Preset Single Register " (FC=6) to serial port.
+             */
+            writeRegister(dataAddress: number, value: number) {
+                const code = 6;
+                const codeLength = 6; // 1B deviceAddress + 1B functionCode + 2B dataAddress + 2B value
+                const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
+                const view = new DataView(buf);
 
-                    view.setUint8(0, address);
-                    view.setUint8(1, code);
-                    view.setUint16(2, dataAddress, false);
+                view.setUint8(0, address);
+                view.setUint8(1, code);
+                view.setUint16(2, dataAddress, false);
 
-                    view.setUint16(4, value, false);
+                view.setUint16(4, value, false);
 
-                    // add crc bytes to buffer
-                    view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
+                // add crc bytes to buffer
+                view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
 
-                    return bus.writeBufferWithExpectation(buf, {
-                        address,
-                        code,
-                        length: 8,
-                    });
-                },
+                return bus.writeBufferWithExpectation(buf, {
+                    address,
+                    code,
+                    length: 8,
+                });
+            },
 
-                /**
-                 * Write a Modbus "Force Multiple Coils" (FC=15) to serial port.
-                 */
-                writeCoils(dataAddress: number, states: boolean[]) {
-                    const code = 15;
-                    const i = 0;
+            /**
+             * Write a Modbus "Force Multiple Coils" (FC=15) to serial port.
+             */
+            writeCoils(dataAddress: number, states: boolean[]) {
+                const code = 15;
+                const i = 0;
 
-                    const dataBytes = Math.ceil(states.length / 8);
-                    const codeLength = 7 + dataBytes;
-                    const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
-                    const view = new DataView(buf);
+                const dataBytes = Math.ceil(states.length / 8);
+                const codeLength = 7 + dataBytes;
+                const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
+                const view = new DataView(buf);
 
-                    view.setUint8(0, address);
-                    view.setUint8(1, code);
-                    view.setUint16(2, dataAddress, false);
+                view.setUint8(0, address);
+                view.setUint8(1, code);
+                view.setUint16(2, dataAddress, false);
 
-                    view.setUint16(4, states.length, false);
-                    view.setUint8(6, dataBytes);
+                view.setUint16(4, states.length, false);
+                view.setUint8(6, dataBytes);
 
-                    // clear the data bytes before writing bits data
-                    for (let i = 0; i < dataBytes; i++) {
-                        view.setUint8(7 + i, 0);
+                // clear the data bytes before writing bits data
+                for (let i = 0; i < dataBytes; i++) {
+                    view.setUint8(7 + i, 0);
+                }
+
+                for (let i = 0; i < states.length; i++) {
+                    // buffer bits are already all zero (0)
+                    // only set the ones set to one (1)
+                    if (states[i]) {
+                        view.setBit(7, i, true);
                     }
+                }
 
-                    for (let i = 0; i < states.length; i++) {
-                        // buffer bits are already all zero (0)
-                        // only set the ones set to one (1)
-                        if (states[i]) {
-                            view.setBit(7, i, true);
-                        }
-                    }
+                // add crc bytes to buffer
+                view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
 
-                    // add crc bytes to buffer
-                    view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
+                return bus.writeBufferWithExpectation(buf, { address, code, length: 8 });
+            },
 
-                    return bus.writeBufferWithExpectation(buf, { address, code, length: 8 });
-                },
+            /**
+             * Write a Modbus "Preset Multiple Registers" (FC=16) to serial port.
+             */
+            writeRegisters(dataAddress: number, values: number[]) {
+                const code = 16;
+                const codeLength = 7 + 2 * values.length;
+                const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
+                const view = new DataView(buf);
 
-                /**
-                 * Write a Modbus "Preset Multiple Registers" (FC=16) to serial port.
-                 */
-                writeRegisters(dataAddress: number, values: number[]) {
-                    const code = 16;
-                    const codeLength = 7 + 2 * values.length;
-                    const buf = new ArrayBuffer(codeLength + 2); // add 2 crc bytes
-                    const view = new DataView(buf);
+                view.setUint8(0, address);
+                view.setUint8(1, code);
+                view.setUint16(2, dataAddress, false);
 
-                    view.setUint8(0, address);
-                    view.setUint8(1, code);
-                    view.setUint16(2, dataAddress, false);
+                view.setUint16(4, values.length, false);
+                view.setUint8(6, values.length * 2);
 
-                    view.setUint16(4, values.length, false);
-                    view.setUint8(6, values.length * 2);
+                for (let i = 0; i < values.length; i++) {
+                    view.setUint16(7 + 2 * i, values[i], false);
+                }
 
-                    for (let i = 0; i < values.length; i++) {
-                        view.setUint16(7 + 2 * i, values[i], false);
-                    }
+                // add crc bytes to buffer
+                view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
 
-                    // add crc bytes to buffer
-                    view.setUint16(codeLength, crc16(buf.slice(0, -2)), true);
-
-                    return bus.writeBufferWithExpectation(buf, {
-                        address,
-                        code,
-                        length: 8,
-                    });
-                },
-            };
-        }
-
-        return this.units[address];
+                return bus.writeBufferWithExpectation(buf, {
+                    address,
+                    code,
+                    length: 8,
+                });
+            },
+        };
     }
 
     private write(chunk: ArrayBuffer) {
@@ -394,6 +389,10 @@ class ModBus {
             return;
         }
         const { buffer, expectation } = this.writingQueue.shift();
+
+        this.logger.debug('modbus.writeBuffer', toHex(buffer));
+        this.write(buffer);
+
         this.currentExpectation = expectation;
 
         const timeoutId = nanoid(8);
@@ -410,9 +409,6 @@ class ModBus {
             },
         };
         expectation.timeout = timeoutId;
-
-        this.logger.debug('modbus.writeBuffer', toHex(buffer));
-        this.write(buffer);
     }
 
     private parseFrame(buffer: ArrayBuffer): [Frame, ArrayBuffer] {
