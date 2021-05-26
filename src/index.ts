@@ -41,7 +41,7 @@ type Expectation = {
     timeout?: string;
 };
 
-const crc16 = function (buffer: ArrayBuffer) {
+function crc16(buffer: ArrayBuffer) {
     let crc = 0xffff;
     let odd;
 
@@ -58,7 +58,7 @@ const crc16 = function (buffer: ArrayBuffer) {
     }
 
     return crc;
-};
+}
 
 const expectationTimeout: { [timeoutId: string]: { expires: number; callback: Function } } = {};
 setInterval(() => {
@@ -71,6 +71,19 @@ setInterval(() => {
         }
     });
 }, 250);
+
+function rejectExpectation(expectation: Expectation, error: string) {
+    const { address, code, length, reject, timeout } = expectation;
+    delete expectationTimeout[timeout];
+    const message = `ModBus: Expectation failed on U(${address}) because: ${error} `;
+    reject(message);
+}
+
+function resolveExpectation(expectation: Expectation, ret: any) {
+    const { timeout, resolve } = expectation;
+    delete expectationTimeout[timeout];
+    resolve(ret);
+}
 
 declare global {
     interface DataView {
@@ -336,12 +349,6 @@ class ModBus {
             const crc = crc16(frame.data);
             if (frame.crc !== crc) {
                 this.logger.debug(`CRC error, expecting ${crc}, but got ${frame.crc}`, frame);
-                if (this.currentExpectation) {
-                    const { timeout, reject } = this.currentExpectation;
-                    delete expectationTimeout[timeout];
-                    reject('CRC error');
-                    this.currentExpectation = undefined;
-                }
                 continue;
             }
 
@@ -368,18 +375,12 @@ class ModBus {
                     ret = this.parseMultipleRegisters(frame);
                 }
 
-                const { timeout, resolve } = this.currentExpectation;
-                delete expectationTimeout[timeout];
-                resolve(ret);
-                this.currentExpectation = undefined;
-            } else if (this.currentExpectation) {
-                const { timeout, reject } = this.currentExpectation;
-                delete expectationTimeout[timeout];
-                reject('Unexpected response');
+                resolveExpectation(this.currentExpectation, ret);
                 this.currentExpectation = undefined;
             }
         }
         this.readingBuffer = buffer;
+        this.writeNext();
     }
 
     private currentExpectation;
@@ -390,6 +391,8 @@ class ModBus {
         }
         const { buffer, expectation } = this.writingQueue.shift();
 
+        // 进行写操作的时候, 原有任何已读数据都应该清空
+        this.readingBuffer = new ArrayBuffer(0);
         this.logger.debug('modbus.writeBuffer', toHex(buffer));
         this.write(buffer);
 
@@ -399,13 +402,12 @@ class ModBus {
         expectationTimeout[timeoutId] = {
             expires: Date.now() + this.timeout(expectation),
             callback: () => {
-                const { address, code, length, reject } = expectation;
-                const message = `ModBus: Expectation Timeout on Unit:${address}`;
-                this.logger.debug(message, { address, code, length });
-                reject(message);
-                this.readingBuffer = new ArrayBuffer(0);
+                rejectExpectation(expectation, `code=${expectation.code} timeout`);
+                this.writingQueue.forEach(({ expectation:e }) => {
+                    rejectExpectation(e, `U(${e.address}) code=${e.code} timeout`);
+                });
                 this.currentExpectation = undefined;
-                this.writeNext();
+                this.writingQueue = [];
             },
         };
         expectation.timeout = timeoutId;
@@ -480,9 +482,7 @@ class ModBus {
         expectation: { address: number; code: number; length: number },
     ) {
         if (this.writingQueue.length > this.queueSize) {
-            return new Promise((_, reject) => {
-                reject('ModBus: expectation queue is full!');
-            });
+            return Promise.reject('ModBus: expectation queue is full!');
         }
 
         return new Promise((resolve, reject) => {
