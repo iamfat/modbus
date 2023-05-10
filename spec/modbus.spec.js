@@ -4,6 +4,7 @@ describe('ModBus', () => {
 
     it('should readCoilStatus()', async () => {
         const modbus = new ModBus({
+            // logger: console,
             write(buffer) {
                 // => 0x01 0x01 0x00 0x00 0x00 0x10 0x3D 0xC6
                 // <= 0x01 0x01 0x02 0x03 0x00 0xB9 0x0C
@@ -22,7 +23,7 @@ describe('ModBus', () => {
 
     it('should support timeout', async (done) => {
         const modbus = new ModBus({
-            timeout: 1000,
+            timeout: 500,
             write(buffer) {
                 // DO NONTHING
             },
@@ -32,14 +33,13 @@ describe('ModBus', () => {
         try {
             const r = await modbus.unit(1).readCoilStatus(0, 16);
         } catch (e) {
-            expect(Date.now() - now).toBeGreaterThan(1000);
-            expect(Date.now() - now).toBeLessThan(2000);
+            expect(Date.now() - now).toBeGreaterThan(500);
+            expect(Date.now() - now).toBeLessThan(1000);
             done();
         }
     });
 
-
-    it('should readInputRegisters()', () => {});
+    it('should readInputRegisters()', async () => {});
 
     it('should readHoldingRegisters()', async () => {});
 

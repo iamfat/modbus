@@ -227,7 +227,7 @@ class ModBus {
                 if (this.isExpecting(frame)) {
                     this.resolveExpectation(result);
                 } else {
-                    this.rejectExpectation(`code=${frame.code} unexpected response`);
+                    this.rejectExpectation('UNEXPECTED_RESPONSE');
                 }
                 buffer = buffer.slice(frame.length);
             } catch (e) {
@@ -375,17 +375,17 @@ class ModBus {
 
     private resolveExpectation(result: Response) {
         const { timeout, resolve } = this.currentExpectation;
+        this.currentExpectation = undefined;
         delete expectationTimeout[timeout];
         resolve(result);
-        this.currentExpectation = undefined;
     }
 
     private rejectExpectation(error: string) {
         const { address, reject, timeout } = this.currentExpectation;
-        delete expectationTimeout[timeout];
-        const message = `ModBus: Expectation failed on U(${address}) because: ${error} `;
-        reject(message);
         this.currentExpectation = undefined;
+        delete expectationTimeout[timeout];
+        this.logger.debug(`modbus.rejectExpectation address=${address} error=${error}`);
+        reject(new Error(error));
     }
 
     private isExpecting(frame: Frame) {
@@ -396,48 +396,46 @@ class ModBus {
 
         const { address, code, length } = this.currentExpectation;
         if (frame.address !== address) {
-            this.logger.debug(
-                `ModBus.Unit(${frame.address}): Address error, expected ${address} but got ${frame.address}`,
-            );
+            this.logger.debug(`modbus.isExpecting [address] expect=${address} actual=${frame.address}`);
             return false;
         }
 
         if (frame.length != length) {
-            this.logger.debug(
-                `ModBus.Unit(${frame.address}): Data length error, expected ${length} but got ${frame.length}`,
-            );
+            this.logger.debug(`modbus.isExpecting [length] expect=${length} actual=${frame.length}`);
             return false;
         }
 
         if (frame.code != code) {
-            this.logger.debug(
-                `ModBus.Unit(${frame.address}): Unexpected data error, expected ${code} but got ${frame.code}`,
-            );
+            this.logger.debug(`modbus.isExpecting [code] expect=${code} actual=${frame.code}`);
             return false;
         }
 
         return true;
     }
 
+    private queuePromise: Promise<Response> = Promise.resolve({});
+
     private currentExpectation?: Expectation;
-    private writePromise?: Promise<Response>;
     private writeBufferWithExpectation(buffer: ArrayBuffer, expectation: Expectation) {
-        const prevPromise = this.writePromise || Promise.resolve();
-        this.writePromise = new Promise((resolve, reject) => {
-            prevPromise.finally(() => {
-                expectation.resolve = resolve;
-                expectation.reject = reject;
-                expectation.timeout = addExpectationTimeout(() => {
-                    this.rejectExpectation(`code=${expectation.code} timeout`);
-                }, this.timeout(expectation));
-                this.currentExpectation = expectation;
-                // 进行写操作的时候, 原有任何已读数据都应该清空
-                this.readingBuffer = new ArrayBuffer(0);
-                this.logger.debug('modbus.writeBuffer', toHex(buffer));
-                this.write && this.write(buffer);
-            });
+        const prevPromise = this.queuePromise;
+        this.queuePromise = new Promise<Response>((resolve, reject) => {
+            prevPromise
+                .catch(() => undefined)
+                .finally(() => {
+                    expectation.resolve = resolve;
+                    expectation.reject = reject;
+                    expectation.timeout = addExpectationTimeout(
+                        () => this.rejectExpectation('EXPECT_TIMEOUT' + ' ' + toHex(buffer)),
+                        this.timeout(expectation),
+                    );
+                    this.currentExpectation = expectation;
+                    // 进行写操作的时候, 原有任何已读数据都应该清空
+                    this.readingBuffer = new ArrayBuffer(0);
+                    this.logger.debug('modbus.writeBuffer', toHex(buffer));
+                    this.write?.(buffer);
+                });
         });
-        return this.writePromise;
+        return this.queuePromise;
     }
 
     unit(address: number) {
