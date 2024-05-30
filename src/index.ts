@@ -222,6 +222,7 @@ class ModBus {
         bytes.set(new Uint8Array(chunk), this.readingBuffer.byteLength);
         let buffer = bytes.buffer;
         for (;;) {
+            if (!buffer) break;
             try {
                 const { frame, result } = this.tryParse(buffer);
                 if (this.isExpecting(frame)) {
@@ -231,13 +232,14 @@ class ModBus {
                 }
                 buffer = buffer.slice(frame.length);
             } catch (e) {
-                if (['TooShortError', 'FrameError'].includes(e.name)) {
-                    break;
-                }
+                // if (['TooShortError', 'FrameError'].includes(e.name)) {
+                //     break;
+                // }
                 if (e.name === 'CRCError') {
                     buffer = buffer.slice(e.frame.length);
                     continue;
                 }
+                break;
             }
         }
         this.readingBuffer = bytes.buffer;
