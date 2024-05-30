@@ -1,6 +1,6 @@
 {
   "name": "@genee/modbus",
-  "version": "1.4.10",
+  "version": "1.4.11",
   "main": "lib/index",
   "license": "MIT",
   "devDependencies": {

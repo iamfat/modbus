@@ -222,7 +222,6 @@ class ModBus {
         bytes.set(new Uint8Array(chunk), this.readingBuffer.byteLength);
         let buffer = bytes.buffer;
         for (;;) {
-            if (!buffer) break;
             try {
                 const { frame, result } = this.tryParse(buffer);
                 if (this.isExpecting(frame)) {
@@ -242,7 +241,7 @@ class ModBus {
                 break;
             }
         }
-        this.readingBuffer = bytes.buffer;
+        this.readingBuffer = buffer;
     }
 
     private parseIncomingFrame(buffer: ArrayBuffer): Frame | undefined {
