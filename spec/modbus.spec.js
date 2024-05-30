@@ -21,6 +21,26 @@ describe('ModBus', () => {
         expect(r.states[6]).toBe(false);
     });
 
+    it('should concat buffer', async () => {
+        const modbus = new ModBus({
+            // logger: console,
+            write(buffer) {
+                // => 0x01 0x01 0x00 0x00 0x00 0x10 0x3D 0xC6
+                // <= 0x01 0x01 0x02 0x03 0x00 0xB9 0x0C
+                expect(toHex(buffer)).toBe('0101000000103dc6');
+                modbus.read(new Uint8Array([0x01, 0x01, 0x02, 0x03]).buffer);
+                modbus.read(new Uint8Array([0x00, 0xb9, 0x0c]).buffer);
+            },
+        });
+
+        modbus.read(new Uint8Array([0xfe]).buffer);
+        const r = await modbus.unit(1).readCoilStatus(0, 16);
+        expect(r.states[0]).toBe(true);
+        expect(r.states[1]).toBe(true);
+        expect(r.states[5]).toBe(false);
+        expect(r.states[6]).toBe(false);
+    });
+
     it('should support timeout', async (done) => {
         const modbus = new ModBus({
             timeout: 500,
